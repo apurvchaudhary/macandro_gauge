@@ -71,7 +71,7 @@ class DigitalClock(BoxLayout):
 
 
 class MonthCalendar(BoxLayout):
-    """A minimal monthly calendar that highlights today."""
+    """A minimal monthly calendar that highlights today and supports swiping."""
 
     def __init__(self, **kwargs):
         super().__init__(orientation="vertical", padding=dp(8), spacing=dp(6), **kwargs)
@@ -80,10 +80,32 @@ class MonthCalendar(BoxLayout):
         )
         self.header = Label(text="", font_size="20sp", color=(1, 1, 1, 1), size_hint_y=None, height=dp(28))
         self.grid = None
+        # Track which month/year are displayed
+        today = datetime.now()
+        self.display_year = today.year
+        self.display_month = today.month
+        # Track touch for swipe
+        self._touch_start = None
         self.add_widget(self.title)
         self.add_widget(self.header)
         self._build()
+        # Refresh periodically only when viewing the current month
         Clock.schedule_interval(self._maybe_refresh, 60)
+
+    def _set_month(self, year: int, month: int):
+        # Normalize year/month to 1..12
+        y, m = year, month
+        while m < 1:
+            m += 12
+            y -= 1
+        while m > 12:
+            m -= 12
+            y += 1
+        self.display_year, self.display_month = y, m
+        self._build()
+
+    def _shift_month(self, delta: int):
+        self._set_month(self.display_year, self.display_month + delta)
 
     def _build(self):
         # Remove the old grid if present
@@ -92,31 +114,61 @@ class MonthCalendar(BoxLayout):
             self.grid = None
         from kivy.uix.gridlayout import GridLayout
 
-        today = datetime.now()
-        year, month = today.year, today.month
         # Update month header
+        year, month = self.display_year, self.display_month
         self.header.text = pycalendar.month_name[month] + f" {year}"
         # Build a new grid
         self.grid = GridLayout(cols=7, rows=7, spacing=dp(4))
-        # Weekday headers (Mon.Sun)
+        # Weekday headers (Mon-Sun)
         for wd in ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]:
             self.grid.add_widget(Label(text=wd, color=(0.7, 0.8, 0.95, 1)))
         # Month days
         cal = pycalendar.Calendar(firstweekday=0)  # Monday
+        today = datetime.now()
         for week in cal.monthdayscalendar(year, month):
             for day in week:
                 if day == 0:
                     self.grid.add_widget(Label(text=""))
                 else:
-                    is_today = day == today.day
+                    # Highlight today only if the displayed month is the current month
+                    is_today = (year == today.year and month == today.month and day == today.day)
                     txt = f"[b]{day}[/b]" if is_today else str(day)
                     col = (0.2, 1, 0.9, 1) if is_today else (0.9, 0.95, 1, 1)
                     self.grid.add_widget(Label(text=txt, markup=True, color=col))
         self.add_widget(self.grid)
 
     def _maybe_refresh(self, dt):
-        # Rebuild periodically; inexpensive for a small grid
-        self._build()
+        # Only refresh when displaying the real current month, so the 'today' highlight stays correct
+        now = datetime.now()
+        if self.display_year == now.year and self.display_month == now.month:
+            self._build()
+
+    # --- Swipe handling ---
+    def on_touch_down(self, touch):
+        if self.collide_point(*touch.pos):
+            self._touch_start = touch.pos
+        return super().on_touch_down(touch)
+
+    def on_touch_up(self, touch):
+        handled = False
+        if self._touch_start and self.collide_point(*touch.pos):
+            sx, sy = self._touch_start
+            dx = touch.x - sx
+            dy = touch.y - sy
+            threshold = dp(60)
+            vertical_limit = dp(80)
+            if abs(dx) > threshold and abs(dy) < vertical_limit:
+                if dx < 0:
+                    # Swipe left -> next month
+                    self._shift_month(+1)
+                else:
+                    # Swipe right -> previous month
+                    self._shift_month(-1)
+                handled = True
+        self._touch_start = None
+        if handled:
+            return True
+        return super().on_touch_up(touch)
 
 
 class EventsPanel(BoxLayout):
