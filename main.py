@@ -1,17 +1,20 @@
-from kivy.lang import Builder
-from kivymd.app import MDApp
+import calendar as pycalendar
+from datetime import datetime
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
+
 from kivy.clock import Clock
+from kivy.lang import Builder
+from kivy.metrics import dp
 from kivy.network.urlrequest import UrlRequest
 from kivy.uix.boxlayout import BoxLayout
 from kivy.uix.label import Label
-from kivy.metrics import dp
-from datetime import datetime
-from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
-import calendar as pycalendar
+from kivy.utils import get_color_from_hex
+from kivymd.app import MDApp
+from kivymd.uix.card import MDCard
 
 from gauge import Gauge
 
-KV = '''
+KV = """
 #:import dp kivy.metrics.dp
 MDBoxLayout:
     orientation: "vertical"
@@ -32,7 +35,7 @@ MDBoxLayout:
         spacing: dp(8)
         size_hint_y: None
         height: dp(200)
-'''
+"""
 
 
 class DigitalClock(BoxLayout):
@@ -41,9 +44,13 @@ class DigitalClock(BoxLayout):
     def __init__(self, tz: str = "local", title: str = "Clock", **kwargs):
         super().__init__(orientation="vertical", padding=dp(8), spacing=dp(6), **kwargs)
         self.tz = tz
-        self.title = Label(text=title, color=(0.8, 0.85, 0.9, 1), font_size="16sp", size_hint_y=None, height=dp(24))
-        self.time_lbl = Label(text="--:--:--", font_size="50sp", markup=True, color=(1, 1, 1, 1))
-        self.date_lbl = Label(text="", font_size="14sp", color=(0.85, 0.9, 1, 1))
+        if tz == "local":
+            color = get_color_from_hex("#5F85F5")
+        else:
+            color = get_color_from_hex("5FF580")
+        self.title = Label(text=title, color=color, font_size="16sp", size_hint_y=None, height=dp(24))
+        self.time_lbl = Label(text="--:--:--", font_size="50sp", markup=True, color=color)
+        self.date_lbl = Label(text="", font_size="14sp", color=color)
         self.add_widget(self.title)
         self.add_widget(self.time_lbl)
         self.add_widget(self.date_lbl)
@@ -69,7 +76,9 @@ class MonthCalendar(BoxLayout):
 
     def __init__(self, **kwargs):
         super().__init__(orientation="vertical", padding=dp(8), spacing=dp(6), **kwargs)
-        self.title = Label(text="Calendar", color=(0.8, 0.85, 0.9, 1), font_size="18sp", size_hint_y=None, height=dp(24))
+        self.title = Label(
+            text="Calendar", color=(0.8, 0.85, 0.9, 1), font_size="18sp", size_hint_y=None, height=dp(24)
+        )
         self.header = Label(text="", font_size="20sp", color=(1, 1, 1, 1), size_hint_y=None, height=dp(28))
         self.grid = None
         self.add_widget(self.title)
@@ -83,6 +92,7 @@ class MonthCalendar(BoxLayout):
             self.remove_widget(self.grid)
             self.grid = None
         from kivy.uix.gridlayout import GridLayout
+
         today = datetime.now()
         year, month = today.year, today.month
         # Update month header
@@ -99,7 +109,7 @@ class MonthCalendar(BoxLayout):
                 if day == 0:
                     self.grid.add_widget(Label(text=""))
                 else:
-                    is_today = (day == today.day)
+                    is_today = day == today.day
                     txt = f"[b]{day}[/b]" if is_today else str(day)
                     col = (0.2, 1, 0.9, 1) if is_today else (0.9, 0.95, 1, 1)
                     self.grid.add_widget(Label(text=txt, markup=True, color=col))
@@ -113,7 +123,7 @@ class MonthCalendar(BoxLayout):
 class DashboardApp(MDApp):
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
-        self.api_url = "http://192.168.1.1:8001/stats"  # change to your endpoint
+        self.api_url = "http://192.168.1.30:8001/stats"
         self.gauges = {}
 
     def build(self):
@@ -122,12 +132,14 @@ class DashboardApp(MDApp):
         root = Builder.load_string(KV)
 
         # Top row: four gauge cards
-        from kivymd.uix.card import MDCard
-        def gauge_card(title):
-            card = MDCard(orientation="vertical", padding=dp(8), radius=[16], elevation=6)
-            g = Gauge(label=title)
-            card.add_widget(g)
-            return card, g
+        def gauge_card(_title):
+            _card = MDCard(orientation="vertical", padding=dp(8), radius=[16], elevation=6)
+            if _title == "Battery":
+                gauge = Gauge(label=_title, reverse_color_logic=True)
+            else:
+                gauge = Gauge(label=_title)
+            _card.add_widget(gauge)
+            return _card, gauge
 
         for title, key in [("CPU", "cpu"), ("Memory", "mem"), ("Network", "net"), ("Battery", "power")]:
             card, g = gauge_card(title)
@@ -135,17 +147,17 @@ class DashboardApp(MDApp):
             root.ids.top_row.add_widget(card)
 
         # Bottom row: two clocks and a calendar in MDCard
-        def card_with(widget, title):
-            card = MDCard(orientation="vertical", padding=dp(12), radius=[16], elevation=6)
-            card.add_widget(widget)
-            return card
+        def card_with(widget):
+            _card = MDCard(orientation="vertical", padding=dp(12), radius=[16], elevation=6)
+            _card.add_widget(widget)
+            return _card
 
         local_clock = DigitalClock(tz="local", title="New Delhi")
         utc_clock = DigitalClock(tz="Europe/Berlin", title="Munich")
         cal = MonthCalendar()
-        root.ids.bottom_row.add_widget(card_with(local_clock, "New Delhi"))
-        root.ids.bottom_row.add_widget(card_with(utc_clock, "Munich"))
-        root.ids.bottom_row.add_widget(card_with(cal, "Calendar"))
+        root.ids.bottom_row.add_widget(card_with(local_clock))
+        root.ids.bottom_row.add_widget(card_with(utc_clock))
+        root.ids.bottom_row.add_widget(card_with(cal))
 
         # Poll stats
         Clock.schedule_interval(self.update_stats, 2)
@@ -154,30 +166,46 @@ class DashboardApp(MDApp):
     def update_stats(self, dt):
         def _ok(req, result):
             self.show_data(result or {})
+
         def _fail(req, result):
-            # Keep previous values on failure; you may log or set 0s
+            # Keep previous values on failure; you may log or set 0 s
             pass
+
         try:
-            UrlRequest(self.api_url, on_success=_ok, on_error=_fail, on_failure=_fail, timeout=3)
-            print("------API------Called-----")
+            UrlRequest(self.api_url, on_success=_ok, on_error=_fail, on_failure=_fail, timeout=2)
         except Exception:
             pass
 
     def show_data(self, result):
-        self.gauges.get("cpu").value = float(result.get("cpu", 0)) if self.gauges.get("cpu") else 0
-        self.gauges.get("mem").value = float(result.get("mem", 0)) if self.gauges.get("mem") else 0
-        net_val = result.get("net", result.get("network", result.get("disk", 0)))
-        if self.gauges.get("net"):
+        """Update all gauges with smooth animation and safe defaults."""
+
+        def safe_float(value):
             try:
-                self.gauges["net"].value = float(net_val)
-            except Exception:
-                self.gauges["net"].value = 0
-        power_val = result.get("battery", result.get("power", 0))
-        if self.gauges.get("power"):
-            try:
-                self.gauges["power"].value = float(power_val)
-            except Exception:
-                self.gauges["power"].value = 0
+                return float(value)
+            except (TypeError, ValueError):
+                return 0.0
+
+        # CPU
+        cpu = self.gauges.get("cpu")
+        if cpu:
+            cpu.animate_to(safe_float(result.get("cpu", 0)))
+
+        # Memory
+        mem = self.gauges.get("mem")
+        if mem:
+            mem.animate_to(safe_float(result.get("mem", 0)))
+
+        # Network (can come as 'net', 'network', or 'disk')
+        net = self.gauges.get("net")
+        if net:
+            net_val = result.get("net", result.get("network", result.get("disk", 0)))
+            net.animate_to(safe_float(net_val))
+
+        # Power / Battery
+        power = self.gauges.get("power")
+        if power:
+            power_val = result.get("battery", result.get("power", 0))
+            power.animate_to(safe_float(power_val))
 
 
 if __name__ == "__main__":
