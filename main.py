@@ -8,9 +8,11 @@ from kivy.metrics import dp
 from kivy.network.urlrequest import UrlRequest
 from kivy.uix.boxlayout import BoxLayout
 from kivy.uix.label import Label
+from kivy.uix.scrollview import ScrollView
 from kivy.utils import get_color_from_hex
 from kivymd.app import MDApp
 from kivymd.uix.card import MDCard
+from kivymd.uix.list import MDList, TwoLineListItem
 
 from gauge import Gauge
 
@@ -120,11 +122,100 @@ class MonthCalendar(BoxLayout):
         self._build()
 
 
+class EventsPanel(BoxLayout):
+    """Scrollable list of events from the API; highlights the next event."""
+
+    def __init__(self, **kwargs):
+        super().__init__(orientation="vertical", padding=dp(8), spacing=dp(6), **kwargs)
+        self.title = Label(text="Events", color=(0.8, 0.85, 0.9, 1), font_size="16sp", size_hint_y=None, height=dp(24))
+        self.add_widget(self.title)
+        # Scrollable list
+        self.scroll = ScrollView(size_hint=(1, 1))
+        self.list = MDList()
+        self.scroll.add_widget(self.list)
+        self.add_widget(self.scroll)
+
+    @staticmethod
+    def _parse_dt(value: str):
+        if not value:
+            return None
+        try:
+            dt = datetime.fromisoformat(value)
+            if dt.tzinfo is None:
+                return dt.astimezone()  # treat as local naive
+            return dt.astimezone()  # convert to local tz
+        except Exception:
+            return None
+
+    @staticmethod
+    def _format_slot(start: datetime, end: datetime, location: str | None):
+        if not start:
+            return ""
+        local_now = datetime.now().astimezone()
+        same_day = start.date() == local_now.date()
+        time_part = start.strftime("%H:%M")
+        end_part = end.strftime("%H:%M") if end else ""
+        date_part = "Today" if same_day else start.strftime("%a, %d %b")
+        loc_part = f" · {location}" if location else ""
+        # e.g., Today 16:30-18:00 · Room
+        if end_part:
+            return f"{date_part} {time_part}-{end_part}{loc_part}"
+        return f"{date_part} {time_part}{loc_part}"
+
+    def update_events(self, events: list):
+        # Clear the current list
+        self.list.clear_widgets()
+        if not events:
+            self.list.add_widget(TwoLineListItem(text="No upcoming events", secondary_text=""))
+            return
+
+        local_now = datetime.now().astimezone()
+        items = []
+        for ev in events:
+            start = self._parse_dt(ev.get("from"))
+            end = self._parse_dt(ev.get("to"))
+            if start is None and end is None:
+                continue
+            # Use start for sorting; if missing, use the end
+            sort_key = start or end or local_now
+            # Filter: show if the event is ongoing or in the future (end >= now)
+            show = False
+            if end is not None:
+                show = end >= local_now
+            elif start is not None:
+                show = start >= local_now
+            if not show:
+                continue
+            items.append((sort_key, ev, start, end))
+
+        if not items:
+            self.list.add_widget(TwoLineListItem(text="No upcoming events", secondary_text=""))
+            return
+
+        # Sort by start time ascending
+        items.sort(key=lambda x: x[0])
+
+        # Add to the list, highlighting the first item as the main event
+        for idx, (_, ev, start, end) in enumerate(items):
+            title = ev.get("title") or "(No title)"
+            secondary = self._format_slot(start, end, ev.get("location"))
+            li = TwoLineListItem(text=title, secondary_text=secondary)
+            if idx == 0:
+                # Highlight the next/ongoing event
+                try:
+                    li.theme_text_color = "Custom"
+                    li.text_color = get_color_from_hex("#2FF3E0")
+                except Exception:
+                    pass
+            self.list.add_widget(li)
+
+
 class DashboardApp(MDApp):
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
         self.api_url = "http://192.168.1.30:8001/stats"
         self.gauges = {}
+        self.events_panel = EventsPanel()
 
     def build(self):
         self.theme_cls.theme_style = "Dark"
@@ -157,7 +248,7 @@ class DashboardApp(MDApp):
         cal = MonthCalendar()
         root.ids.bottom_row.add_widget(card_with(local_clock))
         root.ids.bottom_row.add_widget(card_with(utc_clock))
-        root.ids.bottom_row.add_widget(card_with(cal))
+        root.ids.bottom_row.add_widget(card_with(self.events_panel))
 
         # Poll stats
         Clock.schedule_interval(self.update_stats, 2)
@@ -206,6 +297,17 @@ class DashboardApp(MDApp):
         if power:
             power_val = result.get("battery", result.get("power", 0))
             power.animate_to(safe_float(power_val))
+
+        # Events list
+        try:
+            events = result.get("events", [])
+        except Exception:
+            events = []
+        if hasattr(self, "events_panel") and self.events_panel:
+            try:
+                self.events_panel.update_events(events)
+            except Exception:
+                pass
 
 
 if __name__ == "__main__":
