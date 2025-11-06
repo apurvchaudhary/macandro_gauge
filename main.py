@@ -50,12 +50,10 @@ class DigitalClock(BoxLayout):
             color = get_color_from_hex("#5F85F5")
         else:
             color = get_color_from_hex("5FF580")
-        self.title = Label(text=title, color=color, font_size="16sp", size_hint_y=None, height=dp(24))
+        self.title = Label(text=title, color=color, font_size="16sp", size_hint_y=None, height=dp(18))
         self.time_lbl = Label(text="--:--:--", font_size="50sp", markup=True, color=color)
-        self.date_lbl = Label(text="", font_size="14sp", color=color)
         self.add_widget(self.title)
         self.add_widget(self.time_lbl)
-        self.add_widget(self.date_lbl)
         Clock.schedule_interval(self._tick, 1)
         self._tick(0)
 
@@ -70,7 +68,6 @@ class DigitalClock(BoxLayout):
     def _tick(self, dt):
         now = self._get_now()
         self.time_lbl.text = now.strftime("%H:%M:%S")
-        self.date_lbl.text = now.strftime("%a, %d %b %Y")
 
 
 class MonthCalendar(BoxLayout):
@@ -237,17 +234,26 @@ class DashboardApp(MDApp):
             self.gauges[key] = g
             root.ids.top_row.add_widget(card)
 
-        # Bottom row: two clocks and a calendar in MDCard
+        # Bottom row: The first card contains both clocks, middle card has calendar, right card has events
         def card_with(widget):
             _card = MDCard(orientation="vertical", padding=dp(12), radius=[16], elevation=6)
             _card.add_widget(widget)
             return _card
 
+        # First card: both clocks stacked
         local_clock = DigitalClock(tz="local", title="New Delhi")
         utc_clock = DigitalClock(tz="Europe/Berlin", title="Munich")
-        cal = MonthCalendar()
-        root.ids.bottom_row.add_widget(card_with(local_clock))
-        root.ids.bottom_row.add_widget(card_with(utc_clock))
+
+        clocks_box = BoxLayout(orientation="vertical", spacing=dp(10), padding=(0, 0, 0, 0))
+        clocks_box.add_widget(local_clock)
+        clocks_box.add_widget(utc_clock)
+        root.ids.bottom_row.add_widget(card_with(clocks_box))
+
+        # Middle card: calendar
+        calendar_widget = MonthCalendar()
+        root.ids.bottom_row.add_widget(card_with(calendar_widget))
+
+        # Right card: events
         root.ids.bottom_row.add_widget(card_with(self.events_panel))
 
         # Poll stats
