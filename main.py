@@ -1,8 +1,10 @@
 import calendar as pycalendar
 from datetime import datetime
+from importlib import import_module
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from kivy.clock import Clock
+from kivy.core.window import Window
 from kivy.lang import Builder
 from kivy.metrics import dp
 from kivy.network.urlrequest import UrlRequest
@@ -10,11 +12,30 @@ from kivy.uix.boxlayout import BoxLayout
 from kivy.uix.label import Label
 from kivy.uix.scrollview import ScrollView
 from kivy.utils import get_color_from_hex
+from kivy.utils import platform as core_platform
 from kivymd.app import MDApp
 from kivymd.uix.card import MDCard
 from kivymd.uix.list import MDList, TwoLineListItem
 
 from gauge import Gauge
+
+autoclass = None
+# Optional: plyer for portable keep-awake
+plyer_keepawake = None
+try:
+    plyer = import_module("plyer")
+    if hasattr(plyer, "keepawake"):
+        plyer_keepawake = plyer.keepawake
+except Exception:
+    # plyer may not be available on all platforms
+    plyer_keepawake = None
+
+# Optional: Pyjnius for Android window flags as redundancy
+try:
+    from jnius import autoclass
+except Exception:
+    autoclass = None
+
 
 KV = """
 #:import dp kivy.metrics.dp
@@ -260,15 +281,51 @@ class EventsPanel(BoxLayout):
 
 
 class DashboardApp(MDApp):
+    _wakelock = None
+
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
         self.api_url = "http://192.168.1.30:8001/stats"
         self.gauges = {}
         self.events_panel = EventsPanel()
 
+    @staticmethod
+    def _android_keep_awake(apply: bool):
+        try:
+            if core_platform != "android" or autoclass is None:
+                return
+            python_activity = autoclass('org.kivy.android.PythonActivity')
+            activity = python_activity.mActivity
+            windowmanager_layout_params = autoclass('android.view.WindowManager$LayoutParams')
+            window = activity.getWindow()
+            if apply:
+                window.addFlags(windowmanager_layout_params.FLAG_KEEP_SCREEN_ON)
+                # Some OEMs require these to avoid dimming/lock when app shows
+                try:
+                    window.addFlags(windowmanager_layout_params.FLAG_TURN_SCREEN_ON)
+                    window.addFlags(windowmanager_layout_params.FLAG_SHOW_WHEN_LOCKED)
+                except Exception:
+                    pass
+            else:
+                window.clearFlags(windowmanager_layout_params.FLAG_KEEP_SCREEN_ON)
+                try:
+                    window.clearFlags(windowmanager_layout_params.FLAG_TURN_SCREEN_ON)
+                    window.clearFlags(windowmanager_layout_params.FLAG_SHOW_WHEN_LOCKED)
+                except Exception:
+                    pass
+        except Exception:
+            # Best-effort only
+            pass
+
     def build(self):
         self.theme_cls.theme_style = "Dark"
         self.theme_cls.primary_palette = "Cyan"
+        # Try multiple strategies to keep the screen awake
+        Window.keep_screen_on = True
+        try:
+            Window.allow_screensaver = False
+        except Exception:
+            pass
         root = Builder.load_string(KV)
 
         # Top row: four gauge cards
@@ -312,6 +369,44 @@ class DashboardApp(MDApp):
         Clock.schedule_interval(self.update_stats, 2)
         return root
 
+    def on_start(self):
+        # Additional keep-awake strategies when the app becomes active
+        try:
+            if plyer_keepawake is not None:
+                plyer_keepawake.on()
+        except Exception:
+            pass
+        # On Android, also add window flags to be extra sure
+        self._android_keep_awake(apply=True)
+
+    def on_stop(self):
+        # Release keep-awake strategies on app stop
+        try:
+            if plyer_keepawake is not None:
+                plyer_keepawake.off()
+        except Exception:
+            pass
+        self._android_keep_awake(apply=False)
+
+    def on_pause(self):
+        # App is going to background; release keep-awake
+        try:
+            if plyer_keepawake is not None:
+                plyer_keepawake.off()
+        except Exception:
+            pass
+        self._android_keep_awake(apply=False)
+        return True
+
+    def on_resume(self):
+        # App returned to foreground; re-apply keep-awake
+        try:
+            if plyer_keepawake is not None:
+                plyer_keepawake.on()
+        except Exception:
+            pass
+        self._android_keep_awake(apply=True)
+
     def update_stats(self, dt):
         def _ok(req, result):
             self.show_data(result or {})
@@ -326,7 +421,9 @@ class DashboardApp(MDApp):
             pass
 
     def show_data(self, result):
-        """Update all gauges with smooth animation and safe defaults."""
+        """
+        Update all gauges with smooth animation and safe defaults.
+        """
 
         def safe_float(value):
             try:

@@ -22,11 +22,15 @@ source.exclude_dirs = tests, bin, venv
 
 version = 1.0
 
-requirements = python3,kivy,kivymd,requests,tzdata
+requirements = python3,kivy,kivymd,requests,tzdata,plyer
 
 icon.filename = logo.png
 presplash.filename = logo.png
 presplash.color = #000000
+
+
+android.allow_cleartext_traffic = True
+android.permissions = INTERNET
 
 [buildozer]
 log_level = 2
