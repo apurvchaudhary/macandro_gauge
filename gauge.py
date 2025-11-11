@@ -31,7 +31,6 @@ class Gauge(Widget):
     value = NumericProperty(0)
     label = StringProperty("")
     reverse_color_logic = BooleanProperty(False)
-    # Colors: [r, g, b, a]
     track_color = ListProperty(GAUGE_TRACK)
     progress_color = ListProperty(GAUGE_PROGRESS_DEFAULT)
     accent_color = ListProperty(GAUGE_ACCENT)
@@ -61,7 +60,7 @@ class Gauge(Widget):
         Animation(progress_color=target_color, duration=0.5, t="in_out_cubic").start(self)
 
     def animate_to(self, new_value: float, duration: float = 0.5) -> None:
-        """Smoothly animate the needle and fill color toward a new value."""
+        new_value = max(0.0, min(100.0, float(new_value or 0.0)))
         Animation.cancel_all(self)
         anim = Animation(value=new_value, duration=duration, t="out_quad")
         anim.start(self)

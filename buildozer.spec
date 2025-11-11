@@ -22,7 +22,7 @@ source.exclude_dirs = tests, bin, venv
 
 version = 1.0
 
-requirements = python3,kivy,kivymd,requests,tzdata,plyer
+requirements = python3,kivy,requests,tzdata,plyer,python-dateutil,git+https://github.com/kivymd/KivyMD.git@master
 
 icon.filename = logo.png
 presplash.filename = logo.png
