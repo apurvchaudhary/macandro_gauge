@@ -7,7 +7,6 @@ from kivy.uix.boxlayout import BoxLayout
 from kivy.uix.label import Label
 from kivy.uix.scrollview import ScrollView
 from kivymd.uix.list import (
-    MDList,
     MDListItem,
     MDListItemHeadlineText,
     MDListItemSupportingText,

@@ -1,11 +1,11 @@
 [app]
 
-title = macGauge
+title = macgauge
 
-package.name = macGauge
+package.name = macgauge
 
 # (str) Package domain (needed for android/ios packaging)
-package.domain = apurvchaudhary.com
+package.domain = com.apurvchaudhary
 
 # (str) Source code where the main.py live
 source.dir = .
@@ -22,7 +22,7 @@ source.exclude_dirs = tests, bin, venv
 
 version = 1.0
 
-requirements = python3,kivy,requests,tzdata,plyer,python-dateutil,git+https://github.com/kivymd/KivyMD.git@master
+requirements = python3,kivy,asyncgui,asynckivy,requests,tzdata,plyer,materialyoucolor,git+https://github.com/kivymd/KivyMD.git@master
 
 icon.filename = logo.png
 presplash.filename = logo.png
