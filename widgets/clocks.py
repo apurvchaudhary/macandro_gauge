@@ -26,7 +26,7 @@ class DigitalClock(BoxLayout):
         if self.tz == "local":
             return datetime.now().astimezone()
         try:
-            return datetime.now(ZoneInfo(self.tz)).astimezone()
+            return datetime.now(ZoneInfo(self.tz))
         except ZoneInfoNotFoundError:
             return datetime.now().astimezone()
 

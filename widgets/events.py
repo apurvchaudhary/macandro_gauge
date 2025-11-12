@@ -34,8 +34,8 @@ class EventListItem(MDListItem):
             font_style="Label",
             theme_text_color="Custom",
             text_color=title_color,
-            shorten=False,
-            role="small",
+            role="medium",
+            shorten=True,
         )
 
         supporting = MDListItemSupportingText(
@@ -141,9 +141,7 @@ class EventsPanel(BoxLayout):
                 continue
             sort_key = start or end or local_now
             show = False
-            if end is not None:
-                show = end >= local_now
-            elif start is not None:
+            if start is not None:
                 show = start >= local_now
             if not show:
                 continue
