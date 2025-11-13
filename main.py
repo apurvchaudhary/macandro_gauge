@@ -34,6 +34,7 @@ except Exception:
     plyer_keepawake = None
 
 BASE_URL = "http://192.168.1.30:8001"
+BASE_FLOAT = 0.0
 
 KV = """
 #:import dp kivy.metrics.dp
@@ -232,16 +233,23 @@ class DashboardApp(MDApp):
         return filtered
 
     def show_data(self, result):
+        """
+        Updates the gauges and events panel using the provided result data. The method extracts specific
+        performance metrics such as CPU, memory, network, and power, then animates the respective
+        gauges to reflect these values. The events data is also updated in the events panel.
+        :param result: Dictionary
+        :type result: Dict
+        """
         def safe_float(v):
             try:
                 return float(v)
-            except Exception:
-                return 0.0
+            except (TypeError, ValueError):
+                return BASE_FLOAT
 
-        cpu = safe_float(result.get("cpu", 0))
-        mem = safe_float(result.get("mem", 0))
-        net = safe_float(result.get("net", result.get("network", result.get("disk", 0))))
-        power = safe_float(result.get("battery", result.get("power", 0)))
+        cpu = safe_float(result.get("cpu", BASE_FLOAT))
+        mem = safe_float(result.get("mem", BASE_FLOAT))
+        net = safe_float(result.get("net", BASE_FLOAT))
+        power = safe_float(result.get("power", BASE_FLOAT))
         events = result.get("events", []) if isinstance(result, dict) else []
 
         stagger = 0.08
@@ -250,12 +258,10 @@ class DashboardApp(MDApp):
         Clock.schedule_once(lambda *_: self.gauges.get("net") and self.gauges["net"].animate_to(net), 2 * stagger)
         Clock.schedule_once(lambda *_: self.gauges.get("power") and self.gauges["power"].animate_to(power), 3 * stagger)
 
-        try:
-            if events != self._last_events:
-                self._last_events = events
-                self.events_panel.update_events(events)
-        except Exception:
-            traceback.print_exc()
+        validated_events = self.events_panel.get_validated_events(events)
+        if validated_events != self._last_events:
+            self._last_events = validated_events
+            self.events_panel.update_events(validated_events)
 
 
 if __name__ == "__main__":

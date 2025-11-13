@@ -53,7 +53,6 @@ class DayScheduleView(FloatLayout):
         self.height = self.content_height
         self.bind(size=self._redraw, pos=self._redraw)
         Clock.schedule_once(self._redraw, 0)
-        Clock.schedule_interval(self._update_now_line, 1 / 30.0)
 
     @staticmethod
     def _layout_events(items):
@@ -145,18 +144,12 @@ class DayScheduleView(FloatLayout):
                 Rectangle(pos=(x, y), size=(w, h))
                 Color(*EVENT_BORDER_SHADOW)
                 Line(rectangle=(x, y, w, h), width=1)
-            box = Label(text=f"[b]{ev.get('title','(No title)')}[/b]\n{ev.get('organizer','')}", markup=True, halign='left', valign='top', color=self.event_text_color)
+            box = Label(text=f"[b]{ev.get('title','(No title)')}[/b] | {ev.get('organizer','')}", markup=True, halign='left', valign='top', color=self.event_text_color)
             box.size_hint = (None, None)
             box.text_size = (w - dp(4), h - dp(4))
             box.size = (w, h)
             box.pos = (x + dp(2), y + dp(2))
             self.add_widget(box)
-
-    def _update_now_line(self, dt):
-        now = datetime.now().astimezone()
-        if now.date() == self.day_date.date():
-            # Only update the now line (redraw minimal part)
-            self._redraw()
 
 
 class DayScheduleModal(ModalView):
@@ -180,7 +173,7 @@ class DayScheduleModal(ModalView):
 
         def scroll_to_10am(*args):
             total_height = timeline.content_height
-            y_10am = 10 * 60 * timeline.dp_per_min
+            y_10am = 15 * 60 * timeline.dp_per_min
             scroll_y = 1 - (y_10am / total_height)
             sc.scroll_y = max(0, min(1, scroll_y))
 

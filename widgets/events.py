@@ -1,6 +1,4 @@
-import hashlib
-import json
-from datetime import datetime
+from datetime import datetime, timedelta
 
 from kivy.metrics import dp
 from kivy.uix.boxlayout import BoxLayout
@@ -13,6 +11,8 @@ from kivymd.uix.list import (
 )
 
 from colors import TEXT_SUBTLE, EVENT_HIGHLIGHT
+
+CLEAR_EVENT_START_BUFFER_MINUTES = 2
 
 
 class EventListItem(MDListItem):
@@ -59,11 +59,11 @@ def parse_iso_to_local(value):
         s = s[:-1] + "+00:00"
     try:
         dt = datetime.fromisoformat(s)
-    except Exception:
+    except ValueError:
         try:
             from dateutil import parser
             dt = parser.isoparse(s)
-        except Exception:
+        except (ValueError, TypeError):
             return None
     if dt.tzinfo is None:
         dt = dt.astimezone()
@@ -94,7 +94,6 @@ class EventsPanel(BoxLayout):
         self.list.bind(minimum_height=self.list.setter("height"))
         self.scroll.add_widget(self.list)
         self.add_widget(self.scroll)
-        self._last_events_hash = None
 
     @staticmethod
     def _format_slot(start: datetime, end: datetime, location: str | None):
@@ -111,49 +110,30 @@ class EventsPanel(BoxLayout):
             return f"{date_part} {time_part}-{end_part}{loc_part}"
         return f"{date_part} {time_part}{loc_part}"
 
-    def _add_empty(self):
-        """Show placeholder when no events."""
+    def __clear_event_list(self):
         self.list.clear_widgets()
-        self.list.add_widget(EventListItem(title="No upcoming events", subtitle=""))
 
-    def update_events(self, events):
-        """Update the list of events (deduplicated by hash)."""
-        try:
-            ev_json = json.dumps(events, sort_keys=True, default=str)
-        except Exception:
-            ev_json = repr(events)
-        h = hashlib.md5(ev_json.encode("utf-8")).hexdigest()
-        if h == self._last_events_hash:
-            return
-        self._last_events_hash = h
-
-        self.list.clear_widgets()
-        if not events:
-            self._add_empty()
-            return
-
+    @staticmethod
+    def get_validated_events(events: list):
+        validated_events = []
         local_now = datetime.now().astimezone()
-        items = []
-        for ev in events:
-            start = parse_iso_to_local(ev.get("from"))
-            end = parse_iso_to_local(ev.get("to"))
+        for event in events:
+            start = parse_iso_to_local(event.get("from"))
+            end = parse_iso_to_local(event.get("to"))
             if start is None and end is None:
                 continue
             sort_key = start or end or local_now
-            show = False
-            if start is not None:
-                show = start >= local_now
-            if not show:
+            if start and start <= (local_now + timedelta(minutes=CLEAR_EVENT_START_BUFFER_MINUTES)):
                 continue
-            items.append((sort_key, ev, start, end))
+            validated_events.append((sort_key, event, start, end))
+        return validated_events
 
-        if not items:
-            self._add_empty()
+    def update_events(self, validated_events: list[tuple]):
+        if not validated_events:
+            self.__clear_event_list()
             return
-
-        items.sort(key=lambda x: x[0])
-
-        for idx, (_, ev, start, end) in enumerate(items):
+        validated_events.sort(key=lambda x: x[0])
+        for idx, (_, ev, start, end) in enumerate(validated_events):
             title = ev.get("title") or "(No title)"
             subtitle = self._format_slot(start, end, ev.get("location"))
             li = EventListItem(title=title, subtitle=subtitle, highlight=(idx == 0))
