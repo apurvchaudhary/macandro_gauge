@@ -129,8 +129,8 @@ class EventsPanel(BoxLayout):
         return validated_events
 
     def update_events(self, validated_events: list[tuple]):
+        self.__clear_event_list()
         if not validated_events:
-            self.__clear_event_list()
             return
         validated_events.sort(key=lambda x: x[0])
         for idx, (_, ev, start, end) in enumerate(validated_events):
