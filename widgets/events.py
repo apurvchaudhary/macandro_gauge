@@ -123,7 +123,7 @@ class EventsPanel(BoxLayout):
             if start is None and end is None:
                 continue
             sort_key = start or end or local_now
-            if start and start <= (local_now + timedelta(minutes=CLEAR_EVENT_START_BUFFER_MINUTES)):
+            if start and start <= (local_now - timedelta(minutes=CLEAR_EVENT_START_BUFFER_MINUTES)):
                 continue
             validated_events.append((sort_key, event, start, end))
         return validated_events
